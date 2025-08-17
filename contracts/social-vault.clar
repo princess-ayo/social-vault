@@ -285,3 +285,114 @@
     false
   )
 )
+
+;; User Registry Existence Checker
+;; Simple user registration verification
+(define-private (user-exists (user principal))
+  (is-some (map-get? Users user))
+)
+
+;; Block Status Verification Engine
+;; Comprehensive blocking relationship checker
+(define-private (is-blocked
+    (blocker principal)
+    (blocked principal)
+  )
+  (is-some (map-get? BlockedUsers {
+    blocker: blocker,
+    blocked: blocked,
+  }))
+)
+
+;; Privacy Settings Retrieval System
+;; Secure defaults with user-defined overrides
+(define-private (get-privacy-settings (user principal))
+  (default-to {
+    friend-list-visible: true,
+    status-visible: true,
+    metadata-visible: true,
+    last-seen-visible: true,
+    profile-image-visible: true,
+    encryption-enabled: false,
+    last-updated: stacks-block-height,
+  }
+    (map-get? UserPrivacy user)
+  )
+)
+
+;; PUBLIC INTERFACE & USER INTERACTION FUNCTIONS
+
+;; Intelligent Batch Size Optimization Engine
+;; Dynamic transaction batching for optimal Layer 2 performance
+(define-public (optimize-batch-size (user principal))
+  (let (
+      (batch-data (unwrap-panic (map-get? UserBatches user)))
+      (current-time stacks-block-height)
+      (time-since-last-batch (- current-time (get last-batch-timestamp batch-data)))
+      (current-batch-size (get batch-size batch-data))
+      (items-in-current-batch (get current-batch-items batch-data))
+    )
+    (if (> time-since-last-batch BATCH_EXPIRY_PERIOD)
+      ;; Batch expired - reset and optimize size for efficiency
+      (begin
+        (map-set UserBatches user
+          (merge batch-data {
+            batch-size: (max-uint MIN_BATCH_SIZE (/ current-batch-size u2)),
+            current-batch-items: u0,
+            last-batch-timestamp: current-time,
+          })
+        )
+        (ok true)
+      )
+      ;; Active batch - dynamic size adjustment based on usage
+      (begin
+        (map-set UserBatches user
+          (merge batch-data { batch-size: (min-uint MAX_BATCH_SIZE
+            (if (>= items-in-current-batch (/ current-batch-size u2))
+              (* current-batch-size u2)
+              current-batch-size
+            )) }
+          ))
+        (ok true)
+      )
+    )
+  )
+)
+
+;; Advanced Privacy Configuration Management
+;; Comprehensive privacy control system with granular permissions
+(define-public (update-advanced-privacy-settings
+    (friend-list-visible bool)
+    (status-visible bool)
+    (metadata-visible bool)
+    (last-seen-visible bool)
+    (profile-image-visible bool)
+    (encryption-enabled bool)
+  )
+  (let ((caller tx-sender))
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (check-rate-limit caller u2) ERR_RATE_LIMITED)
+
+    (map-set UserPrivacy caller {
+      friend-list-visible: friend-list-visible,
+      status-visible: status-visible,
+      metadata-visible: metadata-visible,
+      last-seen-visible: last-seen-visible,
+      profile-image-visible: profile-image-visible,
+      encryption-enabled: encryption-enabled,
+      last-updated: stacks-block-height,
+    })
+
+    (update-rate-limit caller u2)
+    (update-user-activity caller)
+
+    (print {
+      event: "privacy-configuration-updated",
+      user: caller,
+      timestamp: stacks-block-height,
+      encryption-status: encryption-enabled,
+    })
+
+    (ok true)
+  )
+)
